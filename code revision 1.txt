@@ -1,0 +1,263 @@
+/* DJS 27/09/16 ***********************************************************/
+// Adapting LCD.c by DW Smith, 25 January 2012 for 18F45K20 LCD BSc PD&T
+// E on A7, RS on A6,  D4-7 on A0-3.
+// V4 DJS/RK 12/10/16
+// V5 REVISED 05/02/17 for 16DSB007 Semester 2
+//*************************************************************************/
+// #pragma config FOSC = INTIO67
+// #pragma config WDTEN = OFF, LVP = OFF, MCLRE = OFF
+/*                                                                          */
+
+#pragma config FOSC = INTIO67
+#pragma config WDTEN = OFF, LVP = OFF, MCLRE = OFF
+
+
+#include "p18f45k20.h"
+
+#include <delays.h>
+
+#define CLEAR_SCREEN   0b00000001
+#define FOUR_BIT    0b00101100
+#define LINES_5X7    0b00111000
+#define CURSOR_BLINK   0b00001111
+#define CURSOR_RIGHT   0b00000110
+
+#define DATA_PORT  LATD
+#define RS_PIN     PORTDbits.RD6
+#define E_PIN      PORTDbits.RD7
+
+int a = 0;
+int b = 0;
+
+void TurnLeft (void)
+{
+	LATCbits.LATC2 = 1;
+	Delay1KTCYx (100);
+	LATCbits.LATC2 = 0;
+}
+
+void TurnRight (void)
+{
+	LATCbits.LATC1 = 1;
+	Delay1KTCYx (100);
+	LATCbits.LATC1 = 0;
+}
+
+void GoFoward (void)
+{
+	LATCbits.LATC1 = 1;
+	LATCbits.LATC2 = 1;
+	Delay1KTCYx (400);
+	LATCbits.LATC1 = 0;
+	LATCbits.LATC2 = 0;
+}
+
+
+void Delay5milli(void)       //Suitable delay for LCD
+{
+Delay1KTCYx(2);                 
+}
+
+
+void SetAddr(unsigned char DDaddr)
+{
+        DATA_PORT &= 0xf0;                      // Write upper nibble
+        DATA_PORT |= (((DDaddr | 0b10000000)>>4) & 0x0f);
+                        
+        RS_PIN = 0;                             // Set control bit
+       Delay5milli();
+        E_PIN = 1;                              // Clock the cmd and address in
+        Delay5milli();
+        E_PIN = 0;
+
+  DATA_PORT &= 0xf0;                      // Write lower nibble
+        DATA_PORT |= (DDaddr&0x0f);
+
+  Delay5milli();
+        E_PIN = 1;                              // Clock the cmd and address in
+        Delay5milli();
+        E_PIN = 0;
+}
+
+void WriteCmd(unsigned char cmd)
+ {
+        DATA_PORT &= 0xf0;
+        DATA_PORT |= (cmd>>4)&0x0f;           
+        RS_PIN = 0;                       // Set control signals for command
+        Delay5milli();
+        E_PIN = 1;                        // Clock command in
+        Delay5milli();
+        E_PIN = 0;
+
+        
+        DATA_PORT &= 0xf0;                // Lower nibble interface
+        DATA_PORT |= cmd&0x0f;
+  Delay5milli();
+        E_PIN = 1;                        // Clock command in
+        Delay5milli();
+        E_PIN = 0;
+ }
+
+void WriteChar(char data)
+{
+        DATA_PORT &= 0xf0;
+        DATA_PORT |= ((data>>4)&0x0f);
+
+  RS_PIN = 1;                       // Set control bits
+        Delay5milli();
+        E_PIN = 1;                        // Clock nibble into LCD
+        Delay5milli();
+        E_PIN = 0;
+
+      
+        DATA_PORT &= 0xf0;                // Lower nibble interface
+        DATA_PORT |= (data&0x0f);
+        
+        Delay5milli();
+        E_PIN = 1;                        // Clock nibble into LCD
+        Delay5milli();
+        E_PIN = 0;
+}
+
+ void WriteString(const rom char *buffer)    
+{   
+        while(*buffer)                    // Write data to LCD up to null
+        {
+          Delay5milli();
+          WriteChar( *buffer);            // Write character to LCD
+          buffer++;                       // Increment buffer
+        }
+        return;
+}    
+
+  void ADC_Init_1(void)
+{  
+ // initialize the Analog-To-Digital converter.
+    // First, we need to make sure the AN0 pin is enabled as an analog input
+    // as the demo board potentiometer is connected to RA0/AN0
+    // Don't forget that RB0/AN12 must be digital!
+
+ ANSEL = 0; //turn off all other analog inputs
+ ANSELH = 0;
+  ANSELbits.ANS0 = 1; // turn on RA0 analog
+
+    // Sets bits VCFG1 and VCFG0 in ADCON1 so the ADC voltage reference is VSS to VDD
+
+    ADCON1 = 0;
+    
+    //
+    // ADFM = 0 so we can easily read the 8 Most Significant bits from the ADRESH
+    // Special Function Register
+    
+ ADCON2 = 0b00111000;
+
+    // Select channel 0 (AN0) to read the An0 voltage and turn on ADC
+    ADCON0 = 0b00000001;
+
+}
+
+  void ADC_Init_2(void)
+{  
+ // initialize the Analog-To-Digital converter.
+    // First, we need to make sure the AN0 pin is enabled as an analog input
+    // as the demo board potentiometer is connected to RA0/AN0
+    // Don't forget that RB0/AN12 must be digital!
+
+ ANSEL = 0; //turn off all other analog inputs
+ ANSELH = 0;
+  ANSELbits.ANS1 = 1; // turn on RA1 analog
+
+    // Sets bits VCFG1 and VCFG0 in ADCON1 so the ADC voltage reference is VSS to VDD
+
+    ADCON1 = 0;
+    
+    //
+    // ADFM = 0 so we can easily read the 8 Most Significant bits from the ADRESH
+    // Special Function Register
+    
+ ADCON2 = 0b00111000;
+
+    // Select channel 0 (AN0) to read the An0 voltage and turn on ADC
+    ADCON0 = 0b00001001;
+
+}
+
+
+
+
+
+unsigned char ADC_Convert(void)
+
+{ // start an ADC conversion and return the 8 most-significant bits of the result
+    ADCON0bits.GO_DONE = 1;             // start conversion
+    while (ADCON0bits.GO_DONE == 1);    // wait for it to complete
+    return ADRESH;                      // return high byte of result
+}
+
+void main (void)
+{
+
+//SET UP
+
+  
+
+    ANSEL  = 0;                              //turn off all analog inputs
+ ANSELH = 0; 
+    TRISD  = 0b00000000;                   //sets PORTd
+    LATD   = 0b00000000;                  //turns off PORTd outputs, good start position 
+    TRISC  = 0b00000000;                   //sets PORTd
+    LATC   = 0b00000000;                  //turns off PORTd outputs, good start position 
+
+ // this code configures the display  
+  
+ WriteCmd ( 0x02 );       // sets 4bit operation
+ WriteCmd ( CLEAR_SCREEN);  
+ WriteCmd ( FOUR_BIT & LINES_5X7 );   // sets 5x7 and multiline operation.
+ WriteCmd ( CURSOR_BLINK );     // blinks cursor
+ WriteCmd ( CURSOR_RIGHT  );     // moves cursor right 
+
+
+ while (1)
+    {
+
+    ADC_Init_1();
+	ADC_Convert();
+    a = ADRESH;
+	ADC_Init_2();
+    ADC_Convert();
+	b = ADRESH;
+ 	Delay10KTCYx(25);           //delay 25 x 10000 cycles
+
+ 
+ 
+if (a > b ) 
+
+// Start of user program
+
+{
+  WriteCmd ( CLEAR_SCREEN);   
+	SetAddr  (0x80);                     
+	WriteString("left is louder"); 
+	TurnLeft ();
+Delay1KTCYx (1000);
+	GoFoward ();
+
+                       //stop the program - Loop here forever
+ 
+}
+
+else
+
+{
+// Start of user program
+
+   WriteCmd ( CLEAR_SCREEN);   
+	SetAddr  (0x80);                     
+	WriteString("right is louder"); 
+	TurnRight ();
+Delay1KTCYx (1000);
+	GoFoward ();
+                       //stop the program - Loop here forever
+}
+}
+}
